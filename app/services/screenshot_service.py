@@ -31,11 +31,21 @@ class ScreenshotService:
             
         try:
             with SystemUtils.create_temp_file('.png') as temp_file:
-                cmd = ["idb", "screenshot", "--udid", self.udid, temp_file.name]
+                # Try xcrun simctl first as it is built-in and more reliable (no idb daemon needed)
+                cmd = ["xcrun", "simctl", "io", self.udid, "screenshot", temp_file.name]
                 result = subprocess.run(
                     cmd, capture_output=True, 
                     timeout=settings.SCREENSHOT_TIMEOUT
                 )
+                
+                # If simctl fails, try idb as fallback
+                if result.returncode != 0 or not os.path.exists(temp_file.name):
+                    logger.warning(f"simctl screenshot failed, trying idb fallback: {result.stderr.decode('utf-8', errors='ignore')}")
+                    cmd = ["idb", "screenshot", "--udid", self.udid, temp_file.name]
+                    result = subprocess.run(
+                        cmd, capture_output=True, 
+                        timeout=settings.SCREENSHOT_TIMEOUT
+                    )
                 
                 if result.returncode == 0 and os.path.exists(temp_file.name):
                     with Image.open(temp_file.name) as img:
