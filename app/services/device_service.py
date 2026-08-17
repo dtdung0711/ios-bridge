@@ -44,7 +44,7 @@ class DeviceService:
                 found_paths = []
                 
                 # Check basic paths first
-                for d in ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin"]:
+                for d in ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin", "/tmp"]:
                     p = os.path.join(d, "idb-companion")
                     if os.path.exists(p):
                         found_paths.append(p)
