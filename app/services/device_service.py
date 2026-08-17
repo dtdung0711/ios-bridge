@@ -120,6 +120,72 @@ class DeviceService:
         self._point_dimensions_cache = (390, 844)
         return self._point_dimensions_cache
     
+    async def _native_tap(self, x: int, y: int) -> bool:
+        """Native macOS cliclick tap fallback"""
+        try:
+            from app.utils.system_utils import SystemUtils
+            window_info = SystemUtils.get_simulator_window_info()
+            point_w, point_h = await self.get_point_dimensions()
+            
+            click_x = window_info["x"] + int((x / point_w) * window_info["width"])
+            click_y = window_info["y"] + int((y / point_h) * window_info["height"])
+            
+            cmd = ["cliclick", f"c:{click_x},{click_y}"]
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=2)
+            if result.returncode == 0:
+                logger.info(f"✅ Native cliclick tap at ({click_x}, {click_y})")
+                return True
+        except Exception as e:
+            logger.error(f"Native tap failed: {e}")
+        return False
+
+    async def _native_swipe(self, start_x: int, start_y: int, end_x: int, end_y: int) -> bool:
+        """Native macOS cliclick drag/swipe fallback"""
+        try:
+            from app.utils.system_utils import SystemUtils
+            window_info = SystemUtils.get_simulator_window_info()
+            point_w, point_h = await self.get_point_dimensions()
+            
+            s_x = window_info["x"] + int((start_x / point_w) * window_info["width"])
+            s_y = window_info["y"] + int((start_y / point_h) * window_info["height"])
+            e_x = window_info["x"] + int((end_x / point_w) * window_info["width"])
+            e_y = window_info["y"] + int((end_y / point_h) * window_info["height"])
+            
+            cmd = ["cliclick", f"dd:{s_x},{s_y}", f"du:{e_x},{e_y}"]
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=3)
+            if result.returncode == 0:
+                logger.info(f"✅ Native cliclick swipe ({s_x},{s_y}) -> ({e_x},{e_y})")
+                return True
+        except Exception as e:
+            logger.error(f"Native swipe failed: {e}")
+        return False
+
+    async def _native_button(self, button: str) -> bool:
+        """Native macOS AppleScript hardware buttons fallback"""
+        try:
+            btn = button.lower()
+            if btn == 'home':
+                script = 'tell application "Simulator" to activate\ntell application "System Events" to key code 4 using {command down, shift down}'
+            elif btn == 'lock':
+                script = 'tell application "Simulator" to activate\ntell application "System Events" to key code 37 using {command down}'
+            elif btn == 'siri':
+                script = 'tell application "Simulator" to activate\ntell application "System Events" to key code 1 using {command down, shift down}'
+            else:
+                return False
+                
+            res = subprocess.run(["osascript", "-e", script], capture_output=True, timeout=2)
+            return res.returncode == 0
+        except Exception:
+            return False
+
+    async def _native_text(self, text: str) -> bool:
+        """Native macOS text input fallback"""
+        try:
+            res = subprocess.run(["cliclick", f"t:{text}"], capture_output=True, timeout=3)
+            return res.returncode == 0
+        except Exception:
+            return False
+
     async def tap(self, x: int, y: int) -> bool:
         """Perform tap gesture"""
         if not self.udid:
@@ -136,11 +202,11 @@ class DeviceService:
                 logger.info(f"✅ Tap: ({x}, {y}) on {self.udid}")
                 return True
             else:
-                logger.error(f"❌ Tap failed: {result.stderr}")
-                return False
+                logger.warning(f"idb tap failed ({result.stderr}), using native cliclick fallback...")
+                return await self._native_tap(x, y)
         except Exception as e:
-            logger.error(f"Tap error: {e}")
-            return False
+            logger.warning(f"idb tap error: {e}, using native cliclick fallback...")
+            return await self._native_tap(x, y)
     
     async def swipe(self, start_x: int, start_y: int, end_x: int, end_y: int, 
                    duration: float = 0.2) -> bool:
@@ -163,11 +229,11 @@ class DeviceService:
                 logger.info(f"✅ Swipe: ({start_x}, {start_y}) -> ({end_x}, {end_y}) on {self.udid}")
                 return True
             else:
-                logger.error(f"❌ Swipe failed: {result.stderr}")
-                return False
+                logger.warning("idb swipe failed, using native cliclick fallback...")
+                return await self._native_swipe(start_x, start_y, end_x, end_y)
         except Exception as e:
-            logger.error(f"Swipe error: {e}")
-            return False
+            logger.warning(f"idb swipe error: {e}, using native cliclick fallback...")
+            return await self._native_swipe(start_x, start_y, end_x, end_y)
     
     async def input_text(self, text: str) -> bool:
         """Input text"""
@@ -185,11 +251,9 @@ class DeviceService:
                 logger.info("✅ Text entered")
                 return True
             else:
-                logger.error("❌ Text failed")
-                return False
+                return await self._native_text(text)
         except Exception as e:
-            logger.error(f"Text input error: {e}")
-            return False
+            return await self._native_text(text)
     
     async def input_key(self, key: str, duration: float = None) -> bool:
         """Input individual key"""
@@ -238,11 +302,9 @@ class DeviceService:
                 logger.info(f"✅ Button: {button} on {self.udid}")
                 return True
             else:
-                logger.error(f"❌ Button failed: {button}")
-                return False
+                return await self._native_button(button)
         except Exception as e:
-            logger.error(f"Button error: {e}")
-            return False
+            return await self._native_button(button)
     
     async def is_accessible(self) -> bool:
         """Check if device is accessible"""
