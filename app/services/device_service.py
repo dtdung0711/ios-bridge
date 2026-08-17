@@ -44,10 +44,13 @@ class DeviceService:
                 found_paths = []
                 
                 # Check basic paths first
-                for d in ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin", "/tmp"]:
-                    p = os.path.join(d, "idb-companion")
-                    if os.path.exists(p):
-                        found_paths.append(p)
+                home_dir = os.path.expanduser("~")
+                search_dirs = ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin", "/tmp", os.path.join(home_dir, "idb-bin")]
+                for d in search_dirs:
+                    for bin_name in ["idb-companion", "idb_companion"]:
+                        p = os.path.join(d, bin_name)
+                        if os.path.exists(p):
+                            found_paths.append(p)
                         
                 # Dynamic scan for Homebrew prefix and Cellar folders up to 4 levels deep
                 for base_dir in ["/opt/homebrew", "/usr/local"]:
