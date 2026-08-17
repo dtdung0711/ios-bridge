@@ -29,46 +29,56 @@ class ScreenshotService:
         if quality is None:
             quality = settings.DEFAULT_JPEG_QUALITY
             
+        temp_path = None
         try:
-            with SystemUtils.create_temp_file('.png') as temp_file:
-                # Try xcrun simctl first as it is built-in and more reliable (no idb daemon needed)
-                cmd = ["xcrun", "simctl", "io", self.udid, "screenshot", temp_file.name]
+            temp_file = SystemUtils.create_temp_file('.png')
+            temp_path = temp_file.name
+            temp_file.close()  # Close the descriptor so other processes can write to the path
+            
+            # Try xcrun simctl first as it is built-in and more reliable (no idb daemon needed)
+            cmd = ["xcrun", "simctl", "io", self.udid, "screenshot", temp_path]
+            result = subprocess.run(
+                cmd, capture_output=True, 
+                timeout=settings.SCREENSHOT_TIMEOUT
+            )
+            
+            # If simctl fails, try idb as fallback
+            if result.returncode != 0 or not os.path.exists(temp_path):
+                simctl_err = result.stderr.decode('utf-8', errors='ignore') if result.stderr else "File not created"
+                logger.warning(f"simctl screenshot failed, trying idb fallback. Simctl error: {simctl_err}")
+                
+                cmd = ["idb", "screenshot", "--udid", self.udid, temp_path]
                 result = subprocess.run(
                     cmd, capture_output=True, 
                     timeout=settings.SCREENSHOT_TIMEOUT
                 )
+            
+            if result.returncode == 0 and os.path.exists(temp_path):
+                with Image.open(temp_path) as img:
+                    if img.mode != 'RGB':
+                        img = img.convert('RGB')
+                    
+                    # Convert to JPEG
+                    output = io.BytesIO()
+                    img.save(output, format='JPEG', quality=quality, optimize=True)
+                    image_data = output.getvalue()
                 
-                # If simctl fails, try idb as fallback
-                if result.returncode != 0 or not os.path.exists(temp_file.name):
-                    logger.warning(f"simctl screenshot failed, trying idb fallback: {result.stderr.decode('utf-8', errors='ignore')}")
-                    cmd = ["idb", "screenshot", "--udid", self.udid, temp_file.name]
-                    result = subprocess.run(
-                        cmd, capture_output=True, 
-                        timeout=settings.SCREENSHOT_TIMEOUT
-                    )
+                return {
+                    "data": base64.b64encode(image_data).decode('utf-8'),
+                    "pixel_width": img.width,
+                    "pixel_height": img.height
+                }
+            else:
+                stderr_output = result.stderr.decode('utf-8', errors='ignore') if result.stderr else "Unknown error"
+                logger.error(f"Failed to capture screenshot. Return code: {result.returncode}, Error: {stderr_output}")
                 
-                if result.returncode == 0 and os.path.exists(temp_file.name):
-                    with Image.open(temp_file.name) as img:
-                        if img.mode != 'RGB':
-                            img = img.convert('RGB')
-                        
-                        # Convert to JPEG
-                        output = io.BytesIO()
-                        img.save(output, format='JPEG', quality=quality, optimize=True)
-                        image_data = output.getvalue()
-                    
-                    SystemUtils.cleanup_temp_file(temp_file.name)
-                    
-                    return {
-                        "data": base64.b64encode(image_data).decode('utf-8'),
-                        "pixel_width": img.width,
-                        "pixel_height": img.height
-                    }
-                    
         except subprocess.TimeoutExpired:
-            logger.debug(f"Screenshot timeout for UDID: {self.udid}")
+            logger.error(f"Screenshot timeout for UDID: {self.udid}")
         except Exception as e:
             logger.error(f"Screenshot error for UDID {self.udid}: {e}")
+        finally:
+            if temp_path:
+                SystemUtils.cleanup_temp_file(temp_path)
         
         return None
     
