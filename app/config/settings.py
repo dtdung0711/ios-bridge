@@ -27,7 +27,7 @@ class Settings:
     WEBRTC_HIGH_QUALITY: int = 95
     
     # Timeouts
-    SCREENSHOT_TIMEOUT: float = 0.5
+    SCREENSHOT_TIMEOUT: float = 3.0
     TAP_TIMEOUT: float = 2.0
     SWIPE_TIMEOUT: float = 3.0
     TEXT_TIMEOUT: float = 5.0
