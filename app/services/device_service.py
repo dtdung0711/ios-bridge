@@ -39,27 +39,38 @@ class DeviceService:
                     pass
             
             if not companion_running:
-                # Find absolute path of idb-companion
+                # Deep scan Homebrew folders for idb-companion on macOS
                 idb_companion_bin = "idb-companion"  # default fallback
-                possible_paths = [
-                    "/opt/homebrew/bin/idb-companion",
-                    "/usr/local/bin/idb-companion",
-                ]
+                found_paths = []
                 
-                # Check Cellar paths dynamically for versions
-                for cellar_base in ["/opt/homebrew/Cellar/idb-companion", "/usr/local/Cellar/idb-companion"]:
-                    if os.path.exists(cellar_base):
+                # Check basic paths first
+                for d in ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin"]:
+                    p = os.path.join(d, "idb-companion")
+                    if os.path.exists(p):
+                        found_paths.append(p)
+                        
+                # Dynamic scan for Homebrew prefix and Cellar folders up to 4 levels deep
+                for base_dir in ["/opt/homebrew", "/usr/local"]:
+                    if os.path.exists(base_dir):
                         try:
-                            for version in os.listdir(cellar_base):
-                                bin_path = os.path.join(cellar_base, version, "bin", "idb-companion")
-                                if os.path.exists(bin_path):
-                                    possible_paths.append(bin_path)
+                            for root, dirs, files in os.walk(base_dir):
+                                # Limit scan depth to keep it extremely fast
+                                depth = root.count(os.sep) - base_dir.count(os.sep)
+                                if depth > 4:
+                                    del dirs[:]  # Don't recurse deeper
+                                    continue
+                                if "idb-companion" in files:
+                                    p = os.path.join(root, "idb-companion")
+                                    if p not in found_paths:
+                                        found_paths.append(p)
                         except Exception:
                             pass
                 
-                # Use the first one that exists and is executable
-                for path in possible_paths:
-                    if os.path.exists(path) and os.access(path, os.X_OK):
+                logger.info(f"🔍 Found idb-companion candidates: {found_paths}")
+                
+                # Select the first executable path
+                for path in found_paths:
+                    if os.access(path, os.X_OK):
                         idb_companion_bin = path
                         break
                 
