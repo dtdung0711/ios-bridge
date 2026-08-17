@@ -55,6 +55,11 @@ class VideoService:
     def _try_idb_video_stream(self) -> bool:
         """Try idb video-stream"""
         try:
+            # Make sure idb-companion is running before starting the stream
+            from app.services.device_service import DeviceService
+            device_service = DeviceService(self.udid)
+            device_service._ensure_idb_companion_running()
+            
             logger.info(f"Attempting idb video-stream for {self.udid}...")
             cmd = [
                 "idb", "video-stream",

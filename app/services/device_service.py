@@ -25,6 +25,7 @@ class DeviceService:
         try:
             import psutil
             import time
+            import os
             
             companion_running = False
             for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
@@ -38,8 +39,32 @@ class DeviceService:
                     pass
             
             if not companion_running:
-                cmd = ["idb-companion", "--udid", self.udid]
-                logger.info(f"idb-companion not running for {self.udid}. Spawning background process: {' '.join(cmd)}")
+                # Find absolute path of idb-companion
+                idb_companion_bin = "idb-companion"  # default fallback
+                possible_paths = [
+                    "/opt/homebrew/bin/idb-companion",
+                    "/usr/local/bin/idb-companion",
+                ]
+                
+                # Check Cellar paths dynamically for versions
+                for cellar_base in ["/opt/homebrew/Cellar/idb-companion", "/usr/local/Cellar/idb-companion"]:
+                    if os.path.exists(cellar_base):
+                        try:
+                            for version in os.listdir(cellar_base):
+                                bin_path = os.path.join(cellar_base, version, "bin", "idb-companion")
+                                if os.path.exists(bin_path):
+                                    possible_paths.append(bin_path)
+                        except Exception:
+                            pass
+                
+                # Use the first one that exists and is executable
+                for path in possible_paths:
+                    if os.path.exists(path) and os.access(path, os.X_OK):
+                        idb_companion_bin = path
+                        break
+                
+                cmd = [idb_companion_bin, "--udid", self.udid]
+                logger.info(f"idb-companion not running for {self.udid}. Spawning: {' '.join(cmd)}")
                 subprocess.Popen(
                     cmd,
                     stdout=subprocess.DEVNULL,
