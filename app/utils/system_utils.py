@@ -34,21 +34,23 @@ class SystemUtils:
                 coords = result.stdout.strip().split(",")
                 if len(coords) == 4:
                     x, y, width, height = map(int, coords)
-                    screen_x = x + 20
-                    screen_y = y + 100
-                    screen_width = width - 40
-                    screen_height = height - 120
+                    # Titlebar height in macOS is ~28px
+                    titlebar_h = 28
+                    screen_x = x
+                    screen_y = y + titlebar_h
+                    screen_width = width
+                    screen_height = max(100, height - titlebar_h)
                     
                     return {
                         "x": max(0, screen_x),
                         "y": max(0, screen_y),
-                        "width": max(300, screen_width),
-                        "height": max(500, screen_height)
+                        "width": screen_width,
+                        "height": screen_height
                     }
         except Exception as e:
             logger.warning(f"Could not get simulator window info: {e}")
         
-        return {"x": 100, "y": 100, "width": 390, "height": 844}
+        return {"x": 0, "y": 28, "width": 393, "height": 852}
     
     @staticmethod
     def create_temp_file(suffix: str = '.png') -> tempfile.NamedTemporaryFile:

@@ -123,6 +123,9 @@ class DeviceService:
     async def _native_tap(self, x: int, y: int) -> bool:
         """Native macOS cliclick tap fallback"""
         try:
+            # Activate Simulator window
+            subprocess.run(["osascript", "-e", 'tell application "Simulator" to activate'], capture_output=True, timeout=1)
+            
             from app.utils.system_utils import SystemUtils
             window_info = SystemUtils.get_simulator_window_info()
             point_w, point_h = await self.get_point_dimensions()
@@ -142,6 +145,9 @@ class DeviceService:
     async def _native_swipe(self, start_x: int, start_y: int, end_x: int, end_y: int) -> bool:
         """Native macOS cliclick drag/swipe fallback"""
         try:
+            # Activate Simulator window
+            subprocess.run(["osascript", "-e", 'tell application "Simulator" to activate'], capture_output=True, timeout=1)
+            
             from app.utils.system_utils import SystemUtils
             window_info = SystemUtils.get_simulator_window_info()
             point_w, point_h = await self.get_point_dimensions()
