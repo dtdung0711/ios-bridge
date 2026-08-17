@@ -1,3 +1,13 @@
+import os
+import sys
+
+# Ensure Homebrew and standard bin paths are in PATH (needed for macOS GitHub Actions runners)
+_paths = os.environ.get("PATH", "").split(os.pathsep)
+for _p in ["/opt/homebrew/bin", "/usr/local/bin"]:
+    if _p not in _paths:
+        _paths.insert(0, _p)
+os.environ["PATH"] = os.pathsep.join(_paths)
+
 import signal
 import atexit
 import time
