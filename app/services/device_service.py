@@ -16,6 +16,40 @@ class DeviceService:
         """Set the UDID for this service instance"""
         self.udid = udid
         self._point_dimensions_cache = None  # Reset cache when UDID changes
+
+    def _ensure_idb_companion_running(self):
+        """Ensure idb-companion is running for this device"""
+        if not self.udid:
+            return
+            
+        try:
+            import psutil
+            import time
+            
+            companion_running = False
+            for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+                try:
+                    cmdline = proc.info.get('cmdline') or []
+                    cmdline_str = " ".join(cmdline).lower()
+                    if "idb-companion" in cmdline_str and self.udid.lower() in cmdline_str:
+                        companion_running = True
+                        break
+                except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                    pass
+            
+            if not companion_running:
+                cmd = ["idb-companion", "--udid", self.udid]
+                logger.info(f"idb-companion not running for {self.udid}. Spawning background process: {' '.join(cmd)}")
+                subprocess.Popen(
+                    cmd,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    start_new_session=True
+                )
+                # Wait for socket to bind
+                time.sleep(1.5)
+        except Exception as e:
+            logger.error(f"Error ensuring idb-companion is running: {e}")
     
     async def get_point_dimensions(self) -> Tuple[int, int]:
         """Get device point dimensions with caching"""
@@ -26,6 +60,7 @@ class DeviceService:
             return self._point_dimensions_cache
         
         try:
+            self._ensure_idb_companion_running()
             cmd = ["idb", "describe", "--udid", self.udid]
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=3)
             
@@ -53,9 +88,10 @@ class DeviceService:
             return False
             
         try:
+            self._ensure_idb_companion_running()
             cmd = ["idb", "ui", "tap", str(x), str(y), "--udid", self.udid]
             result = subprocess.run(cmd, capture_output=True, text=True, 
-                                  timeout=settings.TAP_TIMEOUT)
+                                   timeout=settings.TAP_TIMEOUT)
             
             if result.returncode == 0:
                 logger.info(f"✅ Tap: ({x}, {y}) on {self.udid}")
@@ -67,7 +103,6 @@ class DeviceService:
             logger.error(f"Tap error: {e}")
             return False
     
-    # ... rest of the methods remain the same but use self.udid
     async def swipe(self, start_x: int, start_y: int, end_x: int, end_y: int, 
                    duration: float = 0.2) -> bool:
         """Perform swipe gesture"""
@@ -76,13 +111,14 @@ class DeviceService:
             return False
             
         try:
+            self._ensure_idb_companion_running()
             cmd = [
                 "idb", "ui", "swipe", 
                 str(start_x), str(start_y), str(end_x), str(end_y),
                 "--duration", str(duration), "--udid", self.udid
             ]
             result = subprocess.run(cmd, capture_output=True, text=True, 
-                                  timeout=settings.SWIPE_TIMEOUT)
+                                   timeout=settings.SWIPE_TIMEOUT)
             
             if result.returncode == 0:
                 logger.info(f"✅ Swipe: ({start_x}, {start_y}) -> ({end_x}, {end_y}) on {self.udid}")
@@ -101,9 +137,10 @@ class DeviceService:
             return False
             
         try:
+            self._ensure_idb_companion_running()
             cmd = ["idb", "ui", "text", text, "--udid", self.udid]
             result = subprocess.run(cmd, capture_output=True, text=True, 
-                                  timeout=settings.TEXT_TIMEOUT)
+                                   timeout=settings.TEXT_TIMEOUT)
             
             if result.returncode == 0:
                 logger.info("✅ Text entered")
@@ -122,12 +159,13 @@ class DeviceService:
             return False
             
         try:
+            self._ensure_idb_companion_running()
             cmd = ["idb", "ui", "key", key, "--udid", self.udid]
             if duration is not None:
                 cmd.extend(["--duration", str(duration)])
                 
             result = subprocess.run(cmd, capture_output=True, text=True, 
-                                  timeout=settings.TEXT_TIMEOUT)
+                                   timeout=settings.TEXT_TIMEOUT)
             
             if result.returncode == 0:
                 logger.info(f"✅ Key entered: {key}")
@@ -146,6 +184,7 @@ class DeviceService:
             return False
             
         try:
+            self._ensure_idb_companion_running()
             button_mapping = {
                 'home': 'HOME', 'lock': 'LOCK', 'siri': 'SIRI',
                 'side-button': 'SIDE_BUTTON', 'apple-pay': 'APPLE_PAY'
@@ -154,7 +193,7 @@ class DeviceService:
             
             cmd = ["idb", "ui", "button", idb_button, "--udid", self.udid]
             result = subprocess.run(cmd, capture_output=True, text=True, 
-                                  timeout=settings.TAP_TIMEOUT)
+                                   timeout=settings.TAP_TIMEOUT)
             
             if result.returncode == 0:
                 logger.info(f"✅ Button: {button} on {self.udid}")
